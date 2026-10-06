@@ -1,0 +1,31 @@
+# VCD 波形窗口裁剪服务编排。
+#
+# 宿主机端口可通过环境变量配置：
+#   VCD_HOST_PORT=9090 docker compose up --build
+# 一次性校验服务（单元测试 + 构建检查 + HTTP 冒烟）：
+#   docker compose build && docker compose up --abort-on-container-exit verify
+services:
+  vcd:
+    build: .
+    image: vcd-window-service:latest
+    ports:
+      # 宿主机端口可配置，容器内固定 8080
+      - "${VCD_HOST_PORT:-8080}:8080"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python3", "-c",
+             "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=2).status == 200 else 1)"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+      start_period: 2s
+
+  verify:
+    image: vcd-window-service:latest
+    depends_on:
+      vcd:
+        condition: service_healthy
+    environment:
+      VCD_URL: "http://vcd:8080"
+    entrypoint: ["/app/scripts/verify.sh"]
+    restart: "no"
